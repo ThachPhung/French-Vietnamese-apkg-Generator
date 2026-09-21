@@ -1,0 +1,17 @@
+llm:
+  provider: ollama
+  model: qwen3
+  host: http://localhost:11434
+
+tts:
+  engine: gtts
+  language: fr
+
+anki:
+  deck_name: "French Vocabulary"
+  package_name: "french_vocabulary.apkg"
+
+paths:
+  input: "input/vocab.txt"
+  output_dir: "output"
+  cache: "cache"
