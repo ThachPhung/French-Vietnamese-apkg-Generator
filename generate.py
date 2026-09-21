@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""French Anki Generator - Main entry point.
+"""Anki Generator - Main entry point.
 
-Generates Anki .apkg flashcard decks from French vocabulary lists.
+Generates Anki .apkg flashcard decks from vocabulary lists.
 Uses Ollama (local LLM) for examples and gTTS for audio.
+Supports French and English vocabulary.
 
 Supports daily incremental workflow:
   Day 1: python generate.py vocab_day01.txt
@@ -11,6 +12,7 @@ Supports daily incremental workflow:
 
 Usage:
     python generate.py vocab.txt
+    python generate.py vocab.txt --lang en
     python generate.py vocab.txt -o output/french_a1.apkg
     python generate.py vocab.txt --deck "French A1"
     python generate.py vocab.txt --force
@@ -21,6 +23,7 @@ import os
 import sys
 
 from src.anki import create_anki_deck
+from src.languages import SUPPORTED_LANGUAGES, get_language_profile
 from src.llm import check_ollama_connection, generate_vocabulary_data
 from src.models import VocabularyItem
 from src.parser import parse_vocab
@@ -43,10 +46,12 @@ BOLD = "\033[1m"
 RESET = "\033[0m"
 
 
-def print_header():
+def print_header(lang_profile: dict):
     """Print the application header."""
+    lang_name = lang_profile["name"]
+    flag = lang_profile["flag"]
     print()
-    print(f"{BOLD}French Anki Generator{RESET}")
+    print(f"{BOLD}{flag} {lang_name} Anki Generator{RESET}")
     print("=" * 40)
     print()
 
@@ -77,15 +82,16 @@ def print_summary(
 
 
 def main():
-    """Main entry point for the French Anki Generator."""
+    """Main entry point for the Anki Generator."""
 
     # ── Parse arguments ──────────────────────────────────────────────────
     parser = argparse.ArgumentParser(
-        description="Generate Anki flashcards from French vocabulary lists.",
+        description="Generate Anki flashcards from vocabulary lists.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
   python generate.py vocab.txt
+  python generate.py vocab.txt --lang en
   python generate.py vocab_day01.txt -o output/day01.apkg
   python generate.py vocab.txt --deck "French A1"
   python generate.py vocab.txt --force
@@ -94,19 +100,26 @@ Examples:
     parser.add_argument(
         "input",
         type=str,
-        help="Path to vocabulary file (format: French word | Vietnamese meaning)",
+        help="Path to vocabulary file (format: Word | Vietnamese meaning)",
+    )
+    parser.add_argument(
+        "--lang", "-l",
+        type=str,
+        default=None,
+        choices=SUPPORTED_LANGUAGES,
+        help=f"Target language ({', '.join(SUPPORTED_LANGUAGES)}). Default: from config.yaml",
     )
     parser.add_argument(
         "--output", "-o",
         type=str,
         default=None,
-        help="Output .apkg file path (default: from config.yaml)",
+        help="Output .apkg file path (default: from config/language profile)",
     )
     parser.add_argument(
         "--deck", "-d",
         type=str,
         default=None,
-        help="Anki deck name (default: from config.yaml)",
+        help="Anki deck name (default: from config/language profile)",
     )
     parser.add_argument(
         "--config", "-c",
@@ -129,18 +142,30 @@ Examples:
 
     # ── Setup ────────────────────────────────────────────────────────────
     setup_logging(verbose=args.verbose)
-    print_header()
 
     # Load config
     config = load_config(args.config)
 
-    # Apply CLI overrides
+    # Determine language: CLI flag > config.yaml > default "fr"
+    lang_code = args.lang or config.get("language", "fr")
+    lang_profile = get_language_profile(lang_code)
+
+    print_header(lang_profile)
+
+    # Apply CLI overrides, falling back to language profile defaults
     input_path = args.input
-    deck_name = args.deck or config["anki"]["deck_name"]
+
+    # Deck name: CLI > config.yaml (if non-empty) > language profile default
+    config_deck = config["anki"].get("deck_name", "")
+    deck_name = args.deck or (config_deck if config_deck else lang_profile["default_deck_name"])
+
+    # Package name: CLI > config.yaml (if non-empty) > language profile default
+    config_pkg = config["anki"].get("package_name", "")
     package_name = args.output or os.path.join(
         config["paths"]["output_dir"],
-        config["anki"]["package_name"],
+        config_pkg if config_pkg else lang_profile["default_package_name"],
     )
+
     cache_dir = config["paths"]["cache"]
     use_cache = not args.force
 
@@ -186,7 +211,7 @@ Examples:
     failed = 0
     audio_count = 0
 
-    tts_language = config["tts"]["language"]
+    tts_language = lang_profile["tts_code"]
 
     for idx, (word, meaning) in enumerate(entries, start=1):
         prefix = f"  [{idx}/{total}]"
@@ -197,6 +222,7 @@ Examples:
             word=word,
             meaning=meaning,
             config=config["llm"],
+            lang_profile=lang_profile,
             cache_dir=cache_dir,
             use_cache=use_cache,
         )
@@ -208,7 +234,7 @@ Examples:
             continue
 
         # ── TTS: Generate word audio ─────────────────────────────
-        word_audio_path = get_word_audio_cache_path(word, cache_dir)
+        word_audio_path = get_word_audio_cache_path(word, cache_dir, lang_code)
         result = generate_word_audio(word, word_audio_path, tts_language)
         if result:
             item.word_audio_path = result
@@ -233,6 +259,7 @@ Examples:
         items=complete_items,
         deck_name=deck_name,
         output_path=package_name,
+        lang_profile=lang_profile,
     )
 
     print(f"{GREEN}OK{RESET}")

@@ -1,3 +1,5 @@
+language: fr        # "fr" (French) or "en" (English)
+
 llm:
   provider: ollama
   model: qwen3
@@ -5,11 +7,10 @@ llm:
 
 tts:
   engine: gtts
-  language: fr
 
 anki:
-  deck_name: "French Vocabulary"
-  package_name: "french_vocabulary.apkg"
+  deck_name: ""          # Leave empty to use language profile default
+  package_name: ""       # Leave empty to use language profile default
 
 paths:
   input: "input/vocab.txt"

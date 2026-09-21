@@ -1,136 +1,265 @@
-# French Anki Generator 🇫🇷🇻🇳
+# Anki Vocabulary Generator
 
-Tự động tạo Anki flashcard từ danh sách từ vựng tiếng Pháp.
+Generate [Anki](https://apps.ankiweb.net/) flashcard decks (`.apkg`) from plain-text vocabulary lists. Uses a local LLM via [Ollama](https://ollama.com/) to create example sentences and [gTTS](https://github.com/pndurette/gTTS) for pronunciation audio.
 
-**Card type:** Typing card — nhìn nghĩa tiếng Việt, gõ từ tiếng Pháp.
+Currently supports **French → Vietnamese** and **English → Vietnamese**.
 
-## Tính năng
+## Features
 
-- 🤖 Tự động sinh câu ví dụ tiếng Pháp và bản dịch tiếng Việt bằng Ollama (LLM)
-- 🔊 Tạo audio phát âm từ vựng tiếng Pháp
-- 📦 Xuất file `.apkg` import trực tiếp vào Anki
-- 💾 Cache thông minh — chạy lại không generate lại dữ liệu cũ
-- ⌨️ Typing card — buộc người học phải gõ từ tiếng Pháp để Anki kiểm tra
-- 🔄 **Daily Incremental Workflow** — Hỗ trợ thêm từ mới mỗi ngày vào cùng 1 deck (`French Vocabulary`). Cơ chế Stable GUID đảm bảo các từ trùng lặp ở các ngày khác nhau sẽ không tạo ra card rác trong Anki.
+- **Multi-language** — Generate cards for French (`--lang fr`) or English (`--lang en`)
+- **LLM-powered examples** — Automatically generates a natural example sentence + Vietnamese translation for each word using Ollama (runs 100% locally, no API keys needed)
+- **Audio pronunciation** — Word-level TTS audio embedded directly in each card
+- **Typing cards** — Cards show the Vietnamese meaning; you type the target-language word. Anki checks your answer character by character
+- **Smart caching** — Re-running the same vocabulary won't regenerate existing data. Cache is stored per-language so French and English never conflict
+- **Daily incremental workflow** — Each word gets a deterministic GUID. Import multiple `.apkg` files into the same Anki deck on different days and Anki will merge them without creating duplicates
+- **Configurable** — Override the deck name, output path, LLM model, and more via CLI flags or `config.yaml`
 
-## Yêu cầu
+## Prerequisites
 
-- Python 3.10+
-- [Ollama](https://ollama.com/) đang chạy local
-- Kết nối internet (dùng gTTS để tạo audio)
+| Dependency | Purpose | Install |
+|---|---|---|
+| **Python 3.10+** | Runtime | [python.org](https://www.python.org/) or via `conda` |
+| **Ollama** | Local LLM for example sentences | [ollama.com](https://ollama.com/) |
+| **Internet** | gTTS audio generation (calls Google Translate TTS) | — |
 
-## Cài đặt
+## Installation
 
 ```bash
-# Clone project (nếu chưa có)
-cd french-anki-generator
+# 1. Clone the repository
+git clone https://github.com/<your-username>/anki-vocabulary-generator.git
+cd anki-vocabulary-generator
 
-# Tạo virtual environment hoặc conda env (khuyến nghị)
-conda create -n anki python=3.11
-conda activate anki
+# 2. Create a virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate        # macOS / Linux
+# .venv\Scripts\activate         # Windows
 
-# Cài dependencies
+# Or use conda:
+# conda create -n anki python=3.11 && conda activate anki
+
+# 3. Install dependencies
 pip install -r requirements.txt
 
-# Pull Ollama model (ví dụ qwen3)
+# 4. Pull an Ollama model
 ollama pull qwen3
 ```
 
-## Sử dụng (Workflow Hằng Ngày)
+## Quick Start
 
-### 1. Chuẩn bị vocabulary
+### 1. Start Ollama
 
-Tạo file text chứa từ vựng cho ngày hôm nay (ví dụ: `vocab_day01.txt`).
-**Format bắt buộc:** `Từ/Cụm từ tiếng Pháp | Nghĩa tiếng Việt`
+```bash
+ollama serve
+```
+
+> This single `ollama serve` instance handles **both** French and English — the tool sends different system prompts depending on the language.
+
+### 2. Create a vocabulary file
+
+Create a plain text file with one entry per line in the format `Word | Vietnamese meaning`:
 
 ```text
+# French example (input/french_day01.txt)
 bonjour | xin chào
 maison | ngôi nhà
-manger | ăn
-voyage | chuyến đi
-prendre | lấy, cầm
 avoir besoin de | cần
-faire attention à | chú ý đến
 ```
 
-*(Tool tự động bỏ qua dòng trống, khoảng trắng thừa và dòng bắt đầu bằng `#`)*
+```text
+# English example (input/english_day01.txt)
+accomplish | hoàn thành
+ambiguous | mơ hồ, không rõ ràng
+nevertheless | tuy nhiên
+```
 
-### 2. Chạy tool
+- Lines starting with `#` are treated as comments and ignored
+- Blank lines are ignored
+- Whitespace around `|` is stripped automatically
+- Duplicate words (case-insensitive) are deduplicated
 
-Truyền trực tiếp tên file vào lệnh chạy:
+### 3. Run the generator
 
 ```bash
-python generate.py vocab_day01.txt
+# French (default)
+python generate.py input/french_day01.txt
+
+# English
+python generate.py input/english_day01.txt --lang en
 ```
 
-### 3. Import vào Anki
+### 4. Import into Anki
 
-File output mặc định sẽ được tạo tại: `output/french_vocabulary.apkg`
+1. Open Anki → **File → Import**
+2. Select the generated `.apkg` file from `output/`
+3. Done! Your cards appear in the deck
 
-Mở Anki → File → Import → chọn file `.apkg`.
-Các từ mới sẽ được tự động thêm vào deck **"French Vocabulary"**.
+On subsequent days, create a new vocabulary file, run the generator, and import again. Anki merges new words into the existing deck without duplicating old ones.
 
-*(Sang ngày 2, bạn chỉ việc tạo `vocab_day02.txt` và chạy lại, sau đó import vào Anki, mọi tiến trình học của ngày cũ vẫn được giữ nguyên)*
+## CLI Reference
 
-## CLI Options
+```
+usage: generate.py [-h] [--lang {fr,en}] [--output OUTPUT] [--deck DECK]
+                   [--config CONFIG] [--force] [--verbose]
+                   input
+```
+
+| Flag | Short | Description | Default |
+|---|---|---|---|
+| `input` | — | Path to vocabulary file (required) | — |
+| `--lang` | `-l` | Target language: `fr` or `en` | `fr` (or from `config.yaml`) |
+| `--output` | `-o` | Output `.apkg` file path | `output/<lang>_vocabulary.apkg` |
+| `--deck` | `-d` | Anki deck name | `French Vocabulary` / `English Vocabulary` |
+| `--config` | `-c` | Path to config file | `config.yaml` |
+| `--force` | `-f` | Ignore cache, regenerate everything | `false` |
+| `--verbose` | `-v` | Enable debug logging | `false` |
+
+### Examples
 
 ```bash
-python generate.py vocab.txt                           # Mặc định xuất ra french_vocabulary.apkg
-python generate.py vocab.txt -o output/day02.apkg      # Custom file output
-python generate.py vocab.txt --deck "French A1"        # Custom tên deck trong Anki
-python generate.py vocab.txt --force                   # Bỏ qua cache, ép tạo lại audio và ví dụ
-python generate.py vocab.txt --verbose                 # Bật log chi tiết để debug
+# Basic French generation
+python generate.py input/day01.txt
+
+# English with custom deck name
+python generate.py input/english.txt --lang en --deck "IELTS Vocabulary"
+
+# Custom output path
+python generate.py input/day01.txt -o output/day01_french.apkg
+
+# Force regenerate (ignore cache)
+python generate.py input/day01.txt --force
+
+# Debug mode
+python generate.py input/day01.txt --verbose
 ```
 
-## Cấu hình
+## Configuration
 
-Bạn có thể chỉnh sửa file `config.yaml` mặc định:
+All settings can be customized in `config.yaml`:
 
 ```yaml
+language: fr              # Default language: "fr" or "en"
+
 llm:
   provider: ollama
-  model: qwen3               # Đổi model LLM tại đây
+  model: qwen3            # Any Ollama model (qwen3, llama3, mistral, etc.)
   host: http://localhost:11434
 
 tts:
   engine: gtts
-  language: fr
 
 anki:
-  deck_name: "French Vocabulary"
-  package_name: "french_vocabulary.apkg"
+  deck_name: ""           # Leave empty → uses language profile default
+  package_name: ""        # Leave empty → uses language profile default
 
 paths:
   output_dir: "output"
   cache: "cache"
 ```
 
-## Card Preview
+**Priority order** for settings: CLI flags > `config.yaml` > language profile defaults.
 
-### Front (Người học thấy)
+## Project Structure
+
+```
+.
+├── generate.py            # CLI entry point
+├── config.yaml            # User configuration
+├── requirements.txt       # Python dependencies
+├── src/
+│   ├── __init__.py
+│   ├── languages.py       # Language profiles (prompts, IDs, TTS codes)
+│   ├── llm.py             # Ollama API integration
+│   ├── models.py          # VocabularyItem dataclass
+│   ├── parser.py          # Vocabulary file parser
+│   ├── tts.py             # gTTS audio generation
+│   └── utils.py           # Config loading, caching, helpers
+├── tests/
+│   ├── test_anki.py
+│   ├── test_llm.py
+│   └── test_parser.py
+├── input/                 # Your vocabulary files (gitignored)
+├── output/                # Generated .apkg files (gitignored)
+└── cache/                 # LLM + audio cache (gitignored)
+    ├── llm/
+    │   ├── fr/            # French LLM cache
+    │   └── en/            # English LLM cache
+    └── audio/
+        ├── fr/            # French audio cache
+        └── en/            # English audio cache
+```
+
+## Card Layout
+
+### Front (Question)
 
 ```
 🇻🇳 xin chào
 
-🔊 [Audio phát âm tiếng Pháp]
+🔊 [pronunciation audio]
 
-[________________________]  <-- Ô nhập text (Type the French word)
+[________________________]   ← Type your answer here
 ```
 
-### Back (Sau khi trả lời)
+### Back (Answer)
 
 ```
-[So sánh kết quả gõ: Chữ Xanh (Đúng) / Chữ Đỏ (Sai)]
+[Character-by-character comparison: green = correct, red = wrong]
 
-🇫🇷 bonjour
+🇫🇷 bonjour                  (or 🇬🇧 hello for English)
 
-🔊 [Audio phát âm tiếng Pháp]
+🔊 [pronunciation audio]
 
 🇻🇳 xin chào
 
-━━━━━━━━━━━━━━━━━━
+────────────────────
 
 📝 Bonjour, comment allez-vous ?
 
 🇻🇳 Xin chào, bạn khỏe không?
 ```
+
+## Adding a New Language
+
+To add support for another language (e.g., Japanese, Spanish):
+
+1. **Add a language profile** in [`src/languages.py`](src/languages.py):
+   - Write a system prompt for the LLM
+   - Choose a unique `model_id` and `deck_id` (any integer, must not collide with existing ones)
+   - Set the `tts_code` (see [gTTS supported languages](https://gtts.readthedocs.io/en/latest/module.html#languages-gtts-lang))
+
+2. That's it. The new language code will automatically appear in `--lang` choices.
+
+```python
+# Example: adding Spanish
+LANGUAGES["es"] = {
+    "name": "Spanish",
+    "flag": "🇪🇸",
+    "tts_code": "es",
+    "model_id": 1607392321,
+    "deck_id": 2059400112,
+    "default_deck_name": "Spanish Vocabulary",
+    "default_package_name": "spanish_vocabulary.apkg",
+    "system_prompt": _SPANISH_SYSTEM_PROMPT,
+}
+```
+
+## Running Tests
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `ERROR: Ollama is not running` | Run `ollama serve` in a separate terminal |
+| `No module named 'genanki'` | Run `pip install -r requirements.txt` |
+| Audio files not generated | Check your internet connection (gTTS requires it) |
+| Duplicate cards after re-import | This shouldn't happen — each word has a stable GUID. Use `--force` if you want to regenerate content |
+| LLM generates bad examples | Try a different model (`model: llama3` in `config.yaml`) or re-run with `--force` |
+
+## License
+
+MIT

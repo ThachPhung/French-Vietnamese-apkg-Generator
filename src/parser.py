@@ -1,6 +1,6 @@
-"""Vocabulary file parser for French Anki Generator.
+"""Vocabulary file parser for Anki Generator.
 
-Parses vocab.txt with format: French word | Vietnamese meaning
+Parses vocab files with format: Word | Vietnamese meaning
 """
 
 import logging
@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import List, Tuple
 
 
-logger = logging.getLogger("french_anki")
+logger = logging.getLogger("anki_generator")
 
 
 def parse_vocab(file_path: str) -> List[Tuple[str, str]]:
     """Parse a vocabulary file and return deduplicated (word, meaning) pairs.
 
     Expected format per line:
-        French word | Vietnamese meaning
+        Word | Vietnamese meaning
 
     Strips whitespace, skips blank lines and comments, removes duplicates.
 
@@ -56,7 +56,7 @@ def parse_vocab(file_path: str) -> List[Tuple[str, str]]:
             if "|" not in line:
                 raise ValueError(
                     f"Line {line_number}: Missing '|' separator. "
-                    f"Expected format: French word | Vietnamese meaning\n"
+                    f"Expected format: Word | Vietnamese meaning\n"
                     f"  Got: {line}"
                 )
 

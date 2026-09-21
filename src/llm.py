@@ -1,10 +1,10 @@
-"""Ollama LLM integration for French Anki Generator.
+"""Ollama LLM integration for Anki Generator.
 
-Handles communication with Ollama API to generate French example sentences
+Handles communication with Ollama API to generate example sentences
 and their Vietnamese translations. Meaning is provided from the input file.
+Supports multiple target languages via language profiles.
 """
 
-import json
 import logging
 import time
 from typing import Optional
@@ -19,48 +19,27 @@ from src.utils import (
 )
 
 
-logger = logging.getLogger("french_anki")
+logger = logging.getLogger("anki_generator")
 
 MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds
 
 
-# ─── System Prompt ───────────────────────────────────────────────────────────
-
-SYSTEM_PROMPT = """You are a French-Vietnamese language assistant. Your task is to help Vietnamese learners study French vocabulary.
-
-For each French word or phrase and its Vietnamese meaning, you must generate:
-1. A natural French example sentence that contains the word/phrase
-2. The Vietnamese translation of that example sentence
-
-Return ONLY a valid JSON object with exactly these fields:
-- "example_fr": a natural French example sentence
-- "example_vi": the Vietnamese translation of the example sentence
-
-Rules:
-1. Return ONLY a valid JSON object. No markdown, no explanation, no extra text.
-2. The example sentence must be simple and natural (A1-A2 level).
-3. The example sentence MUST contain the given word or phrase (conjugated forms are OK for verbs).
-4. For phrases like "avoir besoin de", the example must use the phrase correctly with proper conjugation.
-5. The Vietnamese translation must be accurate and natural.
-6. Do NOT add IPA, pronunciation guides, or grammar notes.
-7. Do NOT generate or change the meaning — it is already provided."""
-
-
-def _build_user_prompt(word: str, meaning: str) -> str:
+def _build_user_prompt(word: str, meaning: str, lang_name: str) -> str:
     """Build the user prompt for a vocabulary word.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase in the target language.
         meaning: The Vietnamese meaning.
+        lang_name: The target language name (e.g., "French", "English").
 
     Returns:
         The user prompt string.
     """
     return (
-        f"French: {word}\n"
+        f"{lang_name}: {word}\n"
         f"Vietnamese meaning: {meaning}\n\n"
-        f'Return JSON: {{"example_fr": "...", "example_vi": "..."}}'
+        f'Return JSON: {{"example_sentence": "...", "example_translation": "..."}}'
     )
 
 
@@ -88,36 +67,45 @@ def check_ollama_connection(host: str) -> bool:
 
 # ─── LLM Generation ─────────────────────────────────────────────────────────
 
-def _call_ollama(word: str, meaning: str, config: dict) -> Optional[dict]:
+def _call_ollama(
+    word: str,
+    meaning: str,
+    config: dict,
+    lang_profile: dict,
+) -> Optional[dict]:
     """Call Ollama API to generate example sentence and translation.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase in the target language.
         meaning: The Vietnamese meaning.
         config: The LLM configuration dictionary.
+        lang_profile: The language profile dictionary.
 
     Returns:
-        Parsed JSON dict with example_fr and example_vi,
+        Parsed JSON dict with example_sentence and example_translation,
         or None on failure.
     """
     host = config.get("host", "http://localhost:11434")
     model = config.get("model", "qwen3")
     url = f"{host}/api/chat"
 
+    system_prompt = lang_profile["system_prompt"]
+    lang_name = lang_profile["name"]
+
     payload = {
         "model": model,
         "stream": False,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _build_user_prompt(word, meaning)},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": _build_user_prompt(word, meaning, lang_name)},
         ],
         "format": {
             "type": "object",
             "properties": {
-                "example_fr": {"type": "string"},
-                "example_vi": {"type": "string"},
+                "example_sentence": {"type": "string"},
+                "example_translation": {"type": "string"},
             },
-            "required": ["example_fr", "example_vi"],
+            "required": ["example_sentence", "example_translation"],
         },
     }
 
@@ -133,7 +121,7 @@ def _call_ollama(word: str, meaning: str, config: dict) -> Optional[dict]:
         return None
 
     # Validate required fields
-    required = ["example_fr", "example_vi"]
+    required = ["example_sentence", "example_translation"]
     if not all(parsed.get(k) for k in required):
         logger.debug("Missing required fields for '%s': %s", word, parsed)
         return None
@@ -145,33 +133,36 @@ def generate_vocabulary_data(
     word: str,
     meaning: str,
     config: dict,
+    lang_profile: dict,
     cache_dir: str,
     use_cache: bool = True,
 ) -> VocabularyItem:
-    """Generate example sentence and translation for a French word.
+    """Generate example sentence and translation for a word.
 
     Meaning is provided from the input file (not generated).
     Checks cache first. If not cached, calls Ollama with retry logic.
     On persistent failure, returns item marked as failed.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase in the target language.
         meaning: The Vietnamese meaning (from input).
         config: The LLM configuration dictionary.
+        lang_profile: The language profile dictionary.
         cache_dir: The base cache directory.
         use_cache: Whether to use caching.
 
     Returns:
         A VocabularyItem populated with LLM data.
     """
+    lang_code = lang_profile["tts_code"]
     item = VocabularyItem(word=word, meaning=meaning)
 
     # Check cache
     if use_cache:
-        cached = load_llm_cache(word, cache_dir)
+        cached = load_llm_cache(word, cache_dir, lang_code)
         if cached:
-            item.example_fr = cached.get("example_fr", "")
-            item.example_vi = cached.get("example_vi", "")
+            item.example_sentence = cached.get("example_sentence", "")
+            item.example_translation = cached.get("example_translation", "")
             logger.debug("Cache hit for '%s'", word)
             return item
 
@@ -179,14 +170,14 @@ def generate_vocabulary_data(
     last_error = ""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            data = _call_ollama(word, meaning, config)
+            data = _call_ollama(word, meaning, config, lang_profile)
             if data:
-                item.example_fr = data["example_fr"]
-                item.example_vi = data["example_vi"]
+                item.example_sentence = data["example_sentence"]
+                item.example_translation = data["example_translation"]
 
                 # Save to cache
                 if use_cache:
-                    save_llm_cache(word, data, cache_dir)
+                    save_llm_cache(word, data, cache_dir, lang_code)
 
                 return item
 

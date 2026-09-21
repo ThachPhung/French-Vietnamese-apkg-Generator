@@ -7,7 +7,13 @@ import zipfile
 import pytest
 
 from src.anki import create_anki_deck
+from src.languages import get_language_profile
 from src.models import VocabularyItem
+
+
+# Fixtures for language profiles
+FR_PROFILE = get_language_profile("fr")
+EN_PROFILE = get_language_profile("en")
 
 
 class TestCreateAnkiDeck:
@@ -17,21 +23,21 @@ class TestCreateAnkiDeck:
         self,
         word: str,
         meaning: str = "test meaning",
-        example_fr: str = "Example sentence.",
-        example_vi: str = "Câu ví dụ.",
+        example_sentence: str = "Example sentence.",
+        example_translation: str = "Câu ví dụ.",
         word_audio: str = None,
     ) -> VocabularyItem:
         """Create a test VocabularyItem."""
         return VocabularyItem(
             word=word,
             meaning=meaning,
-            example_fr=example_fr,
-            example_vi=example_vi,
+            example_sentence=example_sentence,
+            example_translation=example_translation,
             word_audio_path=word_audio,
         )
 
-    def test_create_basic_deck(self):
-        """Should create an .apkg file with valid items."""
+    def test_create_basic_deck_french(self):
+        """Should create an .apkg file with valid French items."""
         items = [
             self._make_item("bonjour", "xin chào"),
             self._make_item("maison", "ngôi nhà"),
@@ -39,7 +45,22 @@ class TestCreateAnkiDeck:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output = os.path.join(tmpdir, "test.apkg")
-            result = create_anki_deck(items, "Test Deck", output)
+            result = create_anki_deck(items, "Test Deck", output, FR_PROFILE)
+
+            assert os.path.exists(result)
+            assert os.path.getsize(result) > 0
+            assert zipfile.is_zipfile(result)
+
+    def test_create_basic_deck_english(self):
+        """Should create an .apkg file with valid English items."""
+        items = [
+            self._make_item("hello", "xin chào"),
+            self._make_item("house", "ngôi nhà"),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, "test.apkg")
+            result = create_anki_deck(items, "Test Deck", output, EN_PROFILE)
 
             assert os.path.exists(result)
             assert os.path.getsize(result) > 0
@@ -55,7 +76,7 @@ class TestCreateAnkiDeck:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output = os.path.join(tmpdir, "test.apkg")
-            result = create_anki_deck(items, "Test Deck", output)
+            result = create_anki_deck(items, "Test Deck", output, FR_PROFILE)
             assert os.path.exists(result)
 
     def test_deck_with_audio_files(self):
@@ -70,7 +91,7 @@ class TestCreateAnkiDeck:
             ]
 
             output = os.path.join(tmpdir, "test.apkg")
-            result = create_anki_deck(items, "Test Deck", output)
+            result = create_anki_deck(items, "Test Deck", output, FR_PROFILE)
 
             assert os.path.exists(result)
             with zipfile.ZipFile(result, "r") as zf:
@@ -81,7 +102,7 @@ class TestCreateAnkiDeck:
         """Should still create a valid .apkg with no cards."""
         with tempfile.TemporaryDirectory() as tmpdir:
             output = os.path.join(tmpdir, "test.apkg")
-            result = create_anki_deck([], "Empty Deck", output)
+            result = create_anki_deck([], "Empty Deck", output, FR_PROFILE)
             assert os.path.exists(result)
 
     def test_output_directory_creation(self):
@@ -89,5 +110,10 @@ class TestCreateAnkiDeck:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = os.path.join(tmpdir, "nested", "dir", "test.apkg")
             items = [self._make_item("bonjour", "xin chào")]
-            result = create_anki_deck(items, "Test Deck", output)
+            result = create_anki_deck(items, "Test Deck", output, FR_PROFILE)
             assert os.path.exists(result)
+
+    def test_different_profiles_different_model_ids(self):
+        """French and English should use different model IDs."""
+        assert FR_PROFILE["model_id"] != EN_PROFILE["model_id"]
+        assert FR_PROFILE["deck_id"] != EN_PROFILE["deck_id"]

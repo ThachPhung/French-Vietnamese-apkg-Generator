@@ -1,4 +1,4 @@
-"""Utility functions for French Anki Generator."""
+"""Utility functions for Anki Generator."""
 
 import json
 import logging
@@ -11,12 +11,13 @@ from typing import Any, Optional
 import yaml
 
 
-logger = logging.getLogger("french_anki")
+logger = logging.getLogger("anki_generator")
 
 
 # ─── Default Configuration ────────────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
+    "language": "fr",
     "llm": {
         "provider": "ollama",
         "model": "qwen3",
@@ -24,11 +25,10 @@ DEFAULT_CONFIG = {
     },
     "tts": {
         "engine": "gtts",
-        "language": "fr",
     },
     "anki": {
-        "deck_name": "French - Vietnamese",
-        "package_name": "french_vietnamese.apkg",
+        "deck_name": "",
+        "package_name": "",
     },
     "paths": {
         "input": "input/vocab.txt",
@@ -92,14 +92,17 @@ def ensure_directories(config: dict) -> None:
     Args:
         config: The application configuration dictionary.
     """
+    from src.languages import SUPPORTED_LANGUAGES
+
     cache_dir = config["paths"]["cache"]
     output_dir = config["paths"]["output_dir"]
 
-    dirs = [
-        output_dir,
-        os.path.join(cache_dir, "llm"),
-        os.path.join(cache_dir, "audio"),
-    ]
+    dirs = [output_dir]
+
+    # Create language-specific cache subdirectories
+    for lang in SUPPORTED_LANGUAGES:
+        dirs.append(os.path.join(cache_dir, "llm", lang))
+        dirs.append(os.path.join(cache_dir, "audio", lang))
 
     for d in dirs:
         os.makedirs(d, exist_ok=True)
@@ -111,7 +114,7 @@ def ensure_directories(config: dict) -> None:
 def sanitize_filename(text: str) -> str:
     """Convert text to a safe filename.
 
-    Handles French accents, spaces, and special characters.
+    Handles accents, spaces, and special characters.
 
     Args:
         text: The text to convert to a filename.
@@ -211,46 +214,49 @@ def setup_logging(verbose: bool = False) -> None:
 
 # ─── Cache Helpers ───────────────────────────────────────────────────────────
 
-def get_llm_cache_path(word: str, cache_dir: str) -> str:
+def get_llm_cache_path(word: str, cache_dir: str, lang_code: str = "fr") -> str:
     """Get the cache file path for a word's LLM data.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase.
         cache_dir: The base cache directory.
+        lang_code: Language code (e.g., "fr", "en").
 
     Returns:
         Path to the cache JSON file.
     """
     filename = sanitize_filename(word) + ".json"
-    return os.path.join(cache_dir, "llm", filename)
+    return os.path.join(cache_dir, "llm", lang_code, filename)
 
 
-def get_word_audio_cache_path(word: str, cache_dir: str) -> str:
+def get_word_audio_cache_path(word: str, cache_dir: str, lang_code: str = "fr") -> str:
     """Get the cache file path for a word's audio.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase.
         cache_dir: The base cache directory.
+        lang_code: Language code (e.g., "fr", "en").
 
     Returns:
         Path to the audio file.
     """
     filename = sanitize_filename(word) + ".mp3"
-    return os.path.join(cache_dir, "audio", filename)
+    return os.path.join(cache_dir, "audio", lang_code, filename)
 
 
 
-def load_llm_cache(word: str, cache_dir: str) -> Optional[dict]:
+def load_llm_cache(word: str, cache_dir: str, lang_code: str = "fr") -> Optional[dict]:
     """Load cached LLM data for a word.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase.
         cache_dir: The base cache directory.
+        lang_code: Language code (e.g., "fr", "en").
 
     Returns:
         Cached data dict, or None if not cached.
     """
-    path = get_llm_cache_path(word, cache_dir)
+    path = get_llm_cache_path(word, cache_dir, lang_code)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -260,15 +266,18 @@ def load_llm_cache(word: str, cache_dir: str) -> Optional[dict]:
     return None
 
 
-def save_llm_cache(word: str, data: dict, cache_dir: str) -> None:
+def save_llm_cache(word: str, data: dict, cache_dir: str, lang_code: str = "fr") -> None:
     """Save LLM data to cache.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase.
         data: The data dictionary to cache.
         cache_dir: The base cache directory.
+        lang_code: Language code (e.g., "fr", "en").
     """
-    path = get_llm_cache_path(word, cache_dir)
+    path = get_llm_cache_path(word, cache_dir, lang_code)
+    # Ensure the language-specific cache directory exists
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

@@ -1,14 +1,13 @@
-"""Anki deck builder for French Anki Generator.
+"""Anki deck builder for multi-language Anki Generator.
 
 Creates Anki decks with typing cards using genanki.
-Cards show Vietnamese meaning on front, user types French word.
+Cards show Vietnamese meaning on front, user types the target-language word.
 
 Supports incremental daily workflow:
 - Deterministic GUID per word → no duplicates on re-import
 - Fixed deck name → all days merge into one deck in Anki
 """
 
-import hashlib
 import logging
 import os
 from typing import List
@@ -19,21 +18,13 @@ from src.models import VocabularyItem
 from src.utils import sanitize_filename
 
 
-logger = logging.getLogger("french_anki")
-
-
-# ─── Stable IDs ──────────────────────────────────────────────────────────────
-# Using fixed IDs ensures Anki recognizes updates to existing cards
-# rather than creating duplicates on re-import.
-
-MODEL_ID = 1607392319
-DECK_ID = 2059400110
+logger = logging.getLogger("anki_generator")
 
 
 # ─── Custom Note with Stable GUID ───────────────────────────────────────────
 
-class FrenchNote(genanki.Note):
-    """Note with deterministic GUID based on the French word.
+class VocabularyNote(genanki.Note):
+    """Note with deterministic GUID based on the word.
 
     This ensures that importing the same word from different .apkg files
     will not create duplicate cards in Anki. Anki uses the GUID to
@@ -129,7 +120,9 @@ code#typeans {
 
 # ─── Card Templates ─────────────────────────────────────────────────────────
 
-FRONT_TEMPLATE = """\
+def _build_front_template() -> str:
+    """Build the front card template."""
+    return """\
 <div class="meaning">🇻🇳 {{Meaning}}</div>
 
 <div class="audio">{{WordAudio}}</div>
@@ -139,46 +132,60 @@ FRONT_TEMPLATE = """\
 </div>
 """
 
-BACK_TEMPLATE = """\
-{{FrontSide}}
+
+def _build_back_template(flag: str) -> str:
+    """Build the back card template with the appropriate language flag.
+
+    Args:
+        flag: The emoji flag for the target language (e.g., "🇫🇷", "🇬🇧").
+    """
+    return f"""\
+{{{{FrontSide}}}}
 
 <hr class="divider">
 
-<div class="word">🇫🇷 {{Word}}</div>
+<div class="word">{flag} {{{{Word}}}}</div>
 
-<div class="audio">{{WordAudio}}</div>
+<div class="audio">{{{{WordAudio}}}}</div>
 
-<div class="meaning">🇻🇳 {{Meaning}}</div>
+<div class="meaning">🇻🇳 {{{{Meaning}}}}</div>
 
-<div class="example">📝 {{ExampleFR}}</div>
+<div class="example">📝 {{{{ExampleSentence}}}}</div>
 
-<div class="translation">🇻🇳 {{ExampleVI}}</div>
+<div class="translation">🇻🇳 {{{{ExampleTranslation}}}}</div>
 """
 
 
 # ─── Model Definition ───────────────────────────────────────────────────────
 
-def _create_model() -> genanki.Model:
+def _create_model(lang_profile: dict) -> genanki.Model:
     """Create the Anki note model with typing card template.
 
+    Args:
+        lang_profile: The language profile dictionary.
+
     Returns:
-        A genanki.Model configured for French vocabulary typing cards.
+        A genanki.Model configured for vocabulary typing cards.
     """
+    model_id = lang_profile["model_id"]
+    lang_name = lang_profile["name"]
+    flag = lang_profile["flag"]
+
     return genanki.Model(
-        MODEL_ID,
-        "French Vocabulary Model",
+        model_id,
+        f"{lang_name} Vocabulary Model",
         fields=[
             {"name": "Word"},
             {"name": "Meaning"},
             {"name": "WordAudio"},
-            {"name": "ExampleFR"},
-            {"name": "ExampleVI"},
+            {"name": "ExampleSentence"},
+            {"name": "ExampleTranslation"},
         ],
         templates=[
             {
-                "name": "French Typing Card",
-                "qfmt": FRONT_TEMPLATE,
-                "afmt": BACK_TEMPLATE,
+                "name": f"{lang_name} Typing Card",
+                "qfmt": _build_front_template(),
+                "afmt": _build_back_template(flag),
             },
         ],
         css=CARD_CSS,
@@ -191,6 +198,7 @@ def create_anki_deck(
     items: List[VocabularyItem],
     deck_name: str,
     output_path: str,
+    lang_profile: dict,
 ) -> str:
     """Create an Anki deck from vocabulary items and export as .apkg.
 
@@ -202,12 +210,14 @@ def create_anki_deck(
         items: List of VocabularyItem objects with generated data.
         deck_name: Name of the Anki deck.
         output_path: Path for the output .apkg file.
+        lang_profile: The language profile dictionary.
 
     Returns:
         The output file path.
     """
-    model = _create_model()
-    deck = genanki.Deck(DECK_ID, deck_name)
+    model = _create_model(lang_profile)
+    deck_id = lang_profile["deck_id"]
+    deck = genanki.Deck(deck_id, deck_name)
     media_files: List[str] = []
 
     cards_created = 0
@@ -224,14 +234,14 @@ def create_anki_deck(
             media_files.append(item.word_audio_path)
 
         # Create note with stable GUID
-        note = FrenchNote(
+        note = VocabularyNote(
             model=model,
             fields=[
                 item.word,
                 item.meaning,
                 word_audio_ref,
-                item.example_fr,
-                item.example_vi,
+                item.example_sentence,
+                item.example_translation,
             ],
         )
         deck.add_note(note)

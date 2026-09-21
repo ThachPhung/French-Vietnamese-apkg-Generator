@@ -1,6 +1,6 @@
-"""Text-to-Speech module for French Anki Generator.
+"""Text-to-Speech module for Anki Generator.
 
-Generates French audio pronunciation using gTTS (Google Text-to-Speech).
+Generates audio pronunciation using gTTS (Google Text-to-Speech).
 Designed as a pluggable interface so TTS engines can be swapped.
 """
 
@@ -11,7 +11,7 @@ from typing import Optional
 from gtts import gTTS
 
 
-logger = logging.getLogger("french_anki")
+logger = logging.getLogger("anki_generator")
 
 
 def generate_audio(
@@ -24,7 +24,7 @@ def generate_audio(
     If the output file already exists, skips generation (cache hit).
 
     Args:
-        text: The French text to synthesize.
+        text: The text to synthesize.
         output_path: Path where the MP3 file will be saved.
         language: Language code for TTS (default: "fr").
 
@@ -65,7 +65,7 @@ def generate_word_audio(
     """Generate pronunciation audio for a single word.
 
     Args:
-        word: The French word or phrase.
+        word: The word or phrase.
         output_path: Path where the MP3 file will be saved.
         language: Language code for TTS.
 
@@ -84,7 +84,7 @@ def generate_example_audio(
     """Generate audio for an example sentence.
 
     Args:
-        example_sentence: The French example sentence.
+        example_sentence: The example sentence.
         output_path: Path where the MP3 file will be saved.
         language: Language code for TTS.
 
