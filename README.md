@@ -6,82 +6,90 @@ Tự động tạo Anki flashcard từ danh sách từ vựng tiếng Pháp.
 
 ## Tính năng
 
-- 🤖 Tự động sinh nghĩa tiếng Việt, câu ví dụ tiếng Pháp, và bản dịch
-- 🔊 Tạo audio phát âm tiếng Pháp (word + example sentence)
+- 🤖 Tự động sinh câu ví dụ tiếng Pháp và bản dịch tiếng Việt bằng Ollama (LLM)
+- 🔊 Tạo audio phát âm từ vựng tiếng Pháp
 - 📦 Xuất file `.apkg` import trực tiếp vào Anki
 - 💾 Cache thông minh — chạy lại không generate lại dữ liệu cũ
-- ⌨️ Typing card — buộc người học phải gõ từ tiếng Pháp
+- ⌨️ Typing card — buộc người học phải gõ từ tiếng Pháp để Anki kiểm tra
+- 🔄 **Daily Incremental Workflow** — Hỗ trợ thêm từ mới mỗi ngày vào cùng 1 deck (`French Vocabulary`). Cơ chế Stable GUID đảm bảo các từ trùng lặp ở các ngày khác nhau sẽ không tạo ra card rác trong Anki.
 
 ## Yêu cầu
 
 - Python 3.10+
-- [Ollama](https://ollama.com/) đang chạy với model đã pull
-- Kết nối internet (cho gTTS audio)
+- [Ollama](https://ollama.com/) đang chạy local
+- Kết nối internet (dùng gTTS để tạo audio)
 
 ## Cài đặt
 
 ```bash
-# Clone project
+# Clone project (nếu chưa có)
 cd french-anki-generator
 
-# Tạo virtual environment (khuyến nghị)
-python -m venv .venv
-source .venv/bin/activate
+# Tạo virtual environment hoặc conda env (khuyến nghị)
+conda create -n anki python=3.11
+conda activate anki
 
 # Cài dependencies
 pip install -r requirements.txt
 
-# Pull Ollama model
+# Pull Ollama model (ví dụ qwen3)
 ollama pull qwen3
 ```
 
-## Sử dụng
+## Sử dụng (Workflow Hằng Ngày)
 
 ### 1. Chuẩn bị vocabulary
 
-Tạo file `input/vocab.txt`:
+Tạo file text chứa từ vựng cho ngày hôm nay (ví dụ: `vocab_day01.txt`).
+**Format bắt buộc:** `Từ/Cụm từ tiếng Pháp | Nghĩa tiếng Việt`
 
 ```text
-bonjour
-maison
-manger
-voyage
-prendre
-avoir besoin de
-faire attention à
+bonjour | xin chào
+maison | ngôi nhà
+manger | ăn
+voyage | chuyến đi
+prendre | lấy, cầm
+avoir besoin de | cần
+faire attention à | chú ý đến
 ```
+
+*(Tool tự động bỏ qua dòng trống, khoảng trắng thừa và dòng bắt đầu bằng `#`)*
 
 ### 2. Chạy tool
 
+Truyền trực tiếp tên file vào lệnh chạy:
+
 ```bash
-python generate.py
+python generate.py vocab_day01.txt
 ```
 
 ### 3. Import vào Anki
 
-File output: `output/french_vietnamese.apkg`
+File output mặc định sẽ được tạo tại: `output/french_vocabulary.apkg`
 
 Mở Anki → File → Import → chọn file `.apkg`.
+Các từ mới sẽ được tự động thêm vào deck **"French Vocabulary"**.
+
+*(Sang ngày 2, bạn chỉ việc tạo `vocab_day02.txt` và chạy lại, sau đó import vào Anki, mọi tiến trình học của ngày cũ vẫn được giữ nguyên)*
 
 ## CLI Options
 
 ```bash
-python generate.py                           # Mặc định
-python generate.py --input input/vocab.txt   # Custom input
-python generate.py --output output/a1.apkg   # Custom output
-python generate.py --deck "French A1"        # Custom deck name
-python generate.py --force                   # Bỏ qua cache, generate lại
-python generate.py --verbose                 # Debug logging
+python generate.py vocab.txt                           # Mặc định xuất ra french_vocabulary.apkg
+python generate.py vocab.txt -o output/day02.apkg      # Custom file output
+python generate.py vocab.txt --deck "French A1"        # Custom tên deck trong Anki
+python generate.py vocab.txt --force                   # Bỏ qua cache, ép tạo lại audio và ví dụ
+python generate.py vocab.txt --verbose                 # Bật log chi tiết để debug
 ```
 
 ## Cấu hình
 
-Chỉnh file `config.yaml`:
+Bạn có thể chỉnh sửa file `config.yaml` mặc định:
 
 ```yaml
 llm:
   provider: ollama
-  model: qwen3               # Thay đổi model Ollama
+  model: qwen3               # Đổi model LLM tại đây
   host: http://localhost:11434
 
 tts:
@@ -89,34 +97,34 @@ tts:
   language: fr
 
 anki:
-  deck_name: "French - Vietnamese"
-  package_name: "french_vietnamese.apkg"
+  deck_name: "French Vocabulary"
+  package_name: "french_vocabulary.apkg"
 
 paths:
-  input: "input/vocab.txt"
   output_dir: "output"
   cache: "cache"
 ```
 
 ## Card Preview
 
-### Front (người học thấy)
+### Front (Người học thấy)
 
 ```
 🇻🇳 xin chào
 
-🔊 [French pronunciation]
+🔊 [Audio phát âm tiếng Pháp]
 
-Type the French word:
-[________________________]
+[________________________]  <-- Ô nhập text (Type the French word)
 ```
 
-### Back (sau khi trả lời)
+### Back (Sau khi trả lời)
 
 ```
+[So sánh kết quả gõ: Chữ Xanh (Đúng) / Chữ Đỏ (Sai)]
+
 🇫🇷 bonjour
 
-🔊 [Word Audio]
+🔊 [Audio phát âm tiếng Pháp]
 
 🇻🇳 xin chào
 
@@ -125,57 +133,4 @@ Type the French word:
 📝 Bonjour, comment allez-vous ?
 
 🇻🇳 Xin chào, bạn khỏe không?
-
-🔊 [Example Audio]
-```
-
-## Cấu trúc project
-
-```
-french-anki-generator/
-├── generate.py          # Entry point
-├── config.yaml          # Configuration
-├── requirements.txt     # Dependencies
-├── input/
-│   └── vocab.txt        # Danh sách từ
-├── output/
-│   └── french_vietnamese.apkg
-├── cache/
-│   ├── llm/             # Cached LLM responses
-│   └── audio/           # Cached audio files
-├── src/
-│   ├── parser.py        # Đọc vocab file
-│   ├── llm.py           # Ollama integration
-│   ├── tts.py           # Text-to-speech
-│   ├── anki.py          # Anki deck builder
-│   ├── models.py        # Data structures
-│   └── utils.py         # Utilities
-└── tests/
-    ├── test_parser.py
-    ├── test_llm.py
-    └── test_anki.py
-```
-
-## Tests
-
-```bash
-python -m pytest tests/ -v
-```
-
-## Troubleshooting
-
-### "Ollama is not running"
-
-```bash
-ollama serve
-```
-
-### Audio không tạo được
-
-Kiểm tra kết nối internet (gTTS sử dụng Google Translate API).
-
-### Model not found
-
-```bash
-ollama pull qwen3
 ```
